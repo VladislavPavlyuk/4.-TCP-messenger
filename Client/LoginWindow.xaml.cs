@@ -14,11 +14,8 @@ namespace Client
         public NetworkStream? Stream { get; private set; }
         public bool IsAuthenticated { get; private set; }
         
-        // Method to clear connection references after transfer to MainWindow
         public void ClearConnectionReferences()
         {
-            // Clear references so OnClosed won't try to close the connection
-            // Connection is now owned by MainWindow
             TcpClient = null;
             Stream = null;
         }
@@ -31,11 +28,6 @@ namespace Client
 
         protected override void OnClosed(EventArgs e)
         {
-            // Only close connection if:
-            // 1. Not authenticated (connection not passed to MainWindow)
-            // 2. Connection references still exist (not yet transferred via ClearConnectionReferences)
-            // If IsAuthenticated is true OR references are null (cleared), connection is being transferred to MainWindow
-            // DO NOT close connection if it's being transferred
             
             // Check if connection should be closed
             bool connectionExists = TcpClient != null && Stream != null;
@@ -64,8 +56,7 @@ namespace Client
             {
                 System.Diagnostics.Debug.WriteLine("LoginWindow.OnClosed: NOT closing connection (transferred to MainWindow)");
             }
-            // If authenticated OR references cleared (null), connection is kept open and passed to MainWindow
-            // Do NOT close connection in these cases - it's owned by MainWindow now
+
             base.OnClosed(e);
         }
 
@@ -132,11 +123,8 @@ namespace Client
                             return;
                         }
                         
-                        // Set DialogResult and close window
-                        // Connection will be transferred to MainWindow in App.xaml.cs
-                        // OnClosed will NOT close connection because IsAuthenticated=true
                         DialogResult = true;
-                        Close(); // This will trigger OnClosed, but IsAuthenticated=true prevents connection closure
+                        Close(); 
                     }
                     else
                     {
@@ -154,8 +142,6 @@ namespace Client
                     StatusTextBlock.Foreground = System.Windows.Media.Brushes.Red;
                     StatusTextBlock.Text = error;
                     
-                    // Keep connection open for both registration and login errors
-                    // Allow user to try again without reconnecting
                 }
             }
             catch (SocketException socketEx)

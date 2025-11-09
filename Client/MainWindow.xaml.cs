@@ -52,9 +52,6 @@ namespace Client
             StatusTextBlock.Text = $"Connected as {username}";
             UpdateUI();
             
-            // Connection is transferred from LoginWindow and should remain open
-            // Connection will be used for messaging operations
-            
             // Load list of registered users
             LoadUsersList();
         }
