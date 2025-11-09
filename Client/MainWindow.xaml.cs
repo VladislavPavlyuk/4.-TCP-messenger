@@ -200,14 +200,34 @@ namespace Client
                     UsersListBox.Items.Clear();
                     string usersData = response.Substring(3); // Remove "OK|"
                     
+                    System.Diagnostics.Debug.WriteLine($"Received users data: {usersData}");
+                    
                     if (!string.IsNullOrEmpty(usersData))
                     {
                         string[] users = usersData.Split(new string[] { "||" }, StringSplitOptions.None);
-                        foreach (string user in users)
+                        foreach (string userData in users)
                         {
-                            if (!string.IsNullOrWhiteSpace(user))
+                            if (!string.IsNullOrWhiteSpace(userData))
                             {
-                                UsersListBox.Items.Add(user);
+                                string[] parts = userData.Split('|');
+                                System.Diagnostics.Debug.WriteLine($"Parsing userData: '{userData}', parts.Length: {parts.Length}");
+                                for (int i = 0; i < parts.Length; i++)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"  parts[{i}]: '{parts[i]}'");
+                                }
+                                
+                                if (parts.Length >= 2)
+                                {
+                                    string username = parts[0].Trim();
+                                    string statusStr = parts[1].Trim();
+                                    bool isOnline = statusStr == "1";
+                                    System.Diagnostics.Debug.WriteLine($"User: '{username}', Status: '{statusStr}', IsOnline: {isOnline}");
+                                    UsersListBox.Items.Add(new UserInfo(username, isOnline));
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Invalid user data format: {userData}, parts.Length: {parts.Length}");
+                                }
                             }
                         }
                     }

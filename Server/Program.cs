@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Data.SQLite;
+using System.Linq;
 
 namespace Server
 {
@@ -9,6 +10,8 @@ namespace Server
     {
         private static TcpListener? _listener;
         private static string _connectionString = "Data Source=messages.db;Version=3;";
+        private static Dictionary<string, TcpClient> _connectedClients = new Dictionary<string, TcpClient>();
+        private static readonly object _clientsLock = new object();
 
         static void Main(string[] args)
         {
@@ -190,6 +193,17 @@ namespace Server
             {
                 try
                 {
+                    // Remove user from connected clients
+                    lock (_clientsLock)
+                    {
+                        var userToRemove = _connectedClients.FirstOrDefault(x => x.Value == client);
+                        if (userToRemove.Key != null)
+                        {
+                            _connectedClients.Remove(userToRemove.Key);
+                            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] User {userToRemove.Key} removed from connected clients");
+                        }
+                    }
+                    
                     if (client.Connected)
                     {
                         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Closing connection with {clientEndpoint}");
@@ -257,7 +271,23 @@ namespace Server
                             return "ERROR|Invalid LOGIN format";
                         }
                         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Attempting login for user {username}");
-                        return LoginUser(parts[1], parts[2]);
+                        string loginResult = LoginUser(parts[1], parts[2]);
+                        // If login successful, add user to connected clients
+                        if (loginResult.StartsWith("OK"))
+                        {
+                            lock (_clientsLock)
+                            {
+                                // Remove old connection if exists (user reconnected)
+                                if (_connectedClients.ContainsKey(username))
+                                {
+                                    _connectedClients.Remove(username);
+                                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Removed old connection for user {username}");
+                                }
+                                _connectedClients[username] = client;
+                                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] User {username} added to connected clients. Total connected: {_connectedClients.Count}");
+                            }
+                        }
+                        return loginResult;
 
                     case "SEND":
                         if (parts.Length < 4)
@@ -442,6 +472,57 @@ namespace Server
             try
             {
                 var users = new List<string>();
+                HashSet<string> onlineUsers;
+                
+                // Get list of online users (only those with active connections)
+                lock (_clientsLock)
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] GetUsers called. Total clients in dictionary: {_connectedClients.Count}");
+                    foreach (var kvp in _connectedClients)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Dictionary contains: {kvp.Key}");
+                    }
+                    
+                    onlineUsers = new HashSet<string>();
+                    var keysToRemove = new List<string>();
+                    
+                    foreach (var kvp in _connectedClients)
+                    {
+                        bool isConnected = false;
+                        try
+                        {
+                            if (kvp.Value != null && kvp.Value.Connected)
+                            {
+                                isConnected = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error checking connection for {kvp.Key}: {ex.Message}");
+                            isConnected = false;
+                        }
+                        
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Checking user {kvp.Key}: Connected={isConnected}, TcpClient.Connected={kvp.Value?.Connected ?? false}");
+                        if (isConnected)
+                        {
+                            onlineUsers.Add(kvp.Key);
+                        }
+                        else
+                        {
+                            // Remove disconnected clients
+                            keysToRemove.Add(kvp.Key);
+                        }
+                    }
+                    
+                    // Clean up disconnected clients
+                    foreach (var key in keysToRemove)
+                    {
+                        _connectedClients.Remove(key);
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Removed disconnected client {key} from tracking");
+                    }
+                    
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Online users: {string.Join(", ", onlineUsers)}");
+                }
                 
                 using (var connection = new SQLiteConnection(_connectionString))
                 {
@@ -457,7 +538,9 @@ namespace Server
                             while (reader.Read())
                             {
                                 string username = reader.GetString(0);
-                                users.Add(username);
+                                bool isOnline = onlineUsers.Contains(username);
+                                // Format: username|isOnline (1 for online, 0 for offline)
+                                users.Add($"{username}|{(isOnline ? "1" : "0")}");
                             }
                         }
                     }
