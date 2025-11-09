@@ -253,6 +253,14 @@ namespace Client
                                 MessagesListBox.Items.Add($"[{timestamp}] From {fromUser}: {message}");
                             }
                         }
+                        
+                        // Scroll to the last message
+                        if (MessagesListBox.Items.Count > 0)
+                        {
+                            MessagesListBox.UpdateLayout();
+                            var lastItem = MessagesListBox.Items[MessagesListBox.Items.Count - 1];
+                            MessagesListBox.ScrollIntoView(lastItem);
+                        }
                     }
                 }
                 else
