@@ -192,8 +192,17 @@ namespace Client
 
                 if (response.StartsWith("OK"))
                 {
-                    HistoryListBox.Items.Insert(0, $"[{DateTime.Now:HH:mm:ss}] To {ToUserTextBox.Text}: {MessageTextBox.Text}");
+                    // Add new message to the end of history
+                    HistoryListBox.Items.Add($"[{DateTime.Now:HH:mm:ss}] To {ToUserTextBox.Text}: {MessageTextBox.Text}");
                     MessageTextBox.Clear();
+                    
+                    // Scroll to the last (newest) message in history
+                    if (HistoryListBox.Items.Count > 0)
+                    {
+                        HistoryListBox.UpdateLayout();
+                        var lastItem = HistoryListBox.Items[HistoryListBox.Items.Count - 1];
+                        HistoryListBox.ScrollIntoView(lastItem);
+                    }
                 }
                 else
                 {
