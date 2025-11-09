@@ -55,7 +55,7 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <ListBox x:Name="UsersListBox" Grid.Row="0" Margin="5">
+                <ListBox x:Name="UsersListBox" Grid.Row="0" Margin="5" MouseDoubleClick="UsersListBox_MouseDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">

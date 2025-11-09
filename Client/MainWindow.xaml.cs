@@ -306,6 +306,40 @@ namespace Client
             LoadUsersList();
         }
 
+        private void UsersListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var listBox = sender as System.Windows.Controls.ListBox;
+            if (listBox == null) return;
+
+            // Get the item that was double-clicked
+            var item = listBox.SelectedItem;
+            if (item == null)
+            {
+                // If no item is selected, try to get it from the click position
+                var point = e.GetPosition(listBox);
+                var hitTestResult = System.Windows.Media.VisualTreeHelper.HitTest(listBox, point);
+                if (hitTestResult != null)
+                {
+                    var dependencyObject = hitTestResult.VisualHit;
+                    while (dependencyObject != null && !(dependencyObject is System.Windows.Controls.ListBoxItem))
+                    {
+                        dependencyObject = System.Windows.Media.VisualTreeHelper.GetParent(dependencyObject);
+                    }
+                    if (dependencyObject is System.Windows.Controls.ListBoxItem listBoxItem)
+                    {
+                        item = listBoxItem.DataContext;
+                    }
+                }
+            }
+
+            if (item is UserInfo selectedUser)
+            {
+                ToUserTextBox.Text = selectedUser.Username;
+                // Focus on message text box for quick typing
+                MessageTextBox.Focus();
+            }
+        }
+
         private void LoadUsersList()
         {
             if (!_isConnected || _stream == null)
