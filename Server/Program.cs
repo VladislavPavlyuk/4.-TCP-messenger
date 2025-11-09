@@ -440,7 +440,8 @@ namespace Server
                 using (var connection = new SQLiteConnection(_connectionString))
                 {
                     connection.Open();
-                    string selectQuery = "SELECT FromUser, Message, Timestamp FROM Messages WHERE ToUser = @user ORDER BY Timestamp";
+                    // Get both incoming and outgoing messages
+                    string selectQuery = "SELECT FromUser, ToUser, Message, Timestamp FROM Messages WHERE ToUser = @user OR FromUser = @user ORDER BY Timestamp";
                     
                     using (var command = new SQLiteCommand(selectQuery, connection))
                     {
@@ -450,9 +451,10 @@ namespace Server
                             while (reader.Read())
                             {
                                 string fromUser = reader.GetString(0);
-                                string message = reader.GetString(1);
-                                string timestamp = reader.GetString(2);
-                                messages.Add($"{fromUser}|{message}|{timestamp}");
+                                string toUser = reader.GetString(1);
+                                string message = reader.GetString(2);
+                                string timestamp = reader.GetString(3);
+                                messages.Add($"{fromUser}|{message}|{timestamp}|{toUser}");
                             }
                         }
                     }

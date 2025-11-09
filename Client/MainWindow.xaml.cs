@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -14,6 +15,7 @@ namespace Client
         private string _username;
         private string _server;
         private int _port;
+        private string? _selectedUser;
 
         public MainWindow(TcpClient tcpClient, NetworkStream stream, string username, string server, int port)
         {
@@ -192,16 +194,12 @@ namespace Client
 
                 if (response.StartsWith("OK"))
                 {
-                    // Add new message to the end of history
-                    HistoryListBox.Items.Add($"[{DateTime.Now:HH:mm:ss}] To {ToUserTextBox.Text}: {MessageTextBox.Text}");
                     MessageTextBox.Clear();
                     
-                    // Scroll to the last (newest) message in history
-                    if (HistoryListBox.Items.Count > 0)
+                    // Reload messages with selected user if one is selected
+                    if (!string.IsNullOrEmpty(_selectedUser))
                     {
-                        HistoryListBox.UpdateLayout();
-                        var lastItem = HistoryListBox.Items[HistoryListBox.Items.Count - 1];
-                        HistoryListBox.ScrollIntoView(lastItem);
+                        LoadMessagesWithUser(_selectedUser);
                     }
                 }
                 else
@@ -225,16 +223,16 @@ namespace Client
             }
         }
 
-        private void RefreshButton_Click(object sender, RoutedEventArgs e)
+        private void LoadMessagesWithUser(string otherUser)
         {
-            if (!_isConnected || _stream == null)
+            if (!_isConnected || _stream == null || string.IsNullOrEmpty(otherUser))
             {
-                MessageBox.Show("Not connected to server", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
             try
             {
+                // Get all messages for current user
                 string request = $"GET|{_username}";
                 byte[] requestBytes = Encoding.UTF8.GetBytes(request);
                 _stream.Write(requestBytes, 0, requestBytes.Length);
@@ -250,16 +248,47 @@ namespace Client
                     
                     if (!string.IsNullOrEmpty(messagesData))
                     {
+                        var messageList = new List<(DateTime timestamp, string fromUser, string toUser, string message)>();
+                        
                         string[] messages = messagesData.Split(new string[] { "||" }, StringSplitOptions.None);
                         foreach (string msg in messages)
                         {
                             string[] parts = msg.Split('|');
-                            if (parts.Length >= 3)
+                            if (parts.Length >= 4)
                             {
                                 string fromUser = parts[0];
                                 string message = parts[1];
-                                string timestamp = parts[2];
-                                MessagesListBox.Items.Add($"[{timestamp}] From {fromUser}: {message}");
+                                string timestampStr = parts[2];
+                                string toUser = parts[3];
+                                
+                                // Parse timestamp
+                                if (DateTime.TryParse(timestampStr, out DateTime timestamp))
+                                {
+                                    // Only show messages where the other party is the selected user
+                                    if ((fromUser == _username && toUser == otherUser) ||
+                                        (fromUser == otherUser && toUser == _username))
+                                    {
+                                        messageList.Add((timestamp, fromUser, toUser, message));
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Sort by timestamp
+                        messageList.Sort((a, b) => a.timestamp.CompareTo(b.timestamp));
+                        
+                        // Display messages
+                        foreach (var msg in messageList)
+                        {
+                            if (msg.fromUser == _username)
+                            {
+                                // Outgoing message
+                                MessagesListBox.Items.Add($"[{msg.timestamp:HH:mm:ss}] To {msg.toUser}: {msg.message}");
+                            }
+                            else
+                            {
+                                // Incoming message
+                                MessagesListBox.Items.Add($"[{msg.timestamp:HH:mm:ss}] From {msg.fromUser}: {msg.message}");
                             }
                         }
                         
@@ -272,24 +301,18 @@ namespace Client
                         }
                     }
                 }
-                else
-                {
-                    MessageBox.Show($"Get messages failed: {response}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
             }
             catch (SocketException)
             {
                 HandleConnectionLoss();
-                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (IOException)
             {
                 HandleConnectionLoss();
-                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Refresh error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Diagnostics.Debug.WriteLine($"Load messages error: {ex.Message}");
             }
         }
 
@@ -297,13 +320,22 @@ namespace Client
         {
             ConnectButton.Content = _isConnected ? "Disconnect" : "Connect";
             SendButton.IsEnabled = _isConnected;
-            RefreshButton.IsEnabled = _isConnected;
             RefreshUsersButton.IsEnabled = _isConnected;
         }
 
         private void RefreshUsersButton_Click(object sender, RoutedEventArgs e)
         {
             LoadUsersList();
+        }
+
+        private void UsersListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (UsersListBox.SelectedItem is UserInfo selectedUser)
+            {
+                _selectedUser = selectedUser.Username;
+                ToUserTextBox.Text = selectedUser.Username;
+                LoadMessagesWithUser(selectedUser.Username);
+            }
         }
 
         private void UsersListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
