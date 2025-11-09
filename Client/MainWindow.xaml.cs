@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows;
@@ -11,6 +12,8 @@ namespace Client
         private NetworkStream? _stream;
         private bool _isConnected = false;
         private string _username;
+        private string _server;
+        private int _port;
 
         public MainWindow(TcpClient tcpClient, NetworkStream stream, string username, string server, int port)
         {
@@ -31,6 +34,8 @@ namespace Client
             _tcpClient = tcpClient;
             _stream = stream;
             _username = username;
+            _server = server;
+            _port = port;
             _isConnected = true;
             
             System.Diagnostics.Debug.WriteLine($"MainWindow created: TcpClient.Connected={tcpClient.Connected}, Stream={stream != null}");
@@ -54,7 +59,16 @@ namespace Client
 
         private void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
-            Disconnect();
+            if (_isConnected)
+            {
+                // Disconnect
+                Disconnect();
+            }
+            else
+            {
+                // Reconnect
+                Connect();
+            }
         }
 
         private void Disconnect()
@@ -70,6 +84,85 @@ namespace Client
             catch (Exception ex)
             {
                 MessageBox.Show($"Disconnect error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void Connect()
+        {
+            try
+            {
+                // Request password for reconnection
+                var passwordDialog = new PasswordDialog();
+                passwordDialog.Owner = this;
+                if (passwordDialog.ShowDialog() != true)
+                {
+                    return; // User cancelled
+                }
+
+                string password = passwordDialog.Password;
+
+                // Connect to server
+                _tcpClient = new TcpClient();
+                _tcpClient.Connect(_server, _port);
+                _stream = _tcpClient.GetStream();
+
+                // Send LOGIN request
+                string request = $"LOGIN|{_username}|{password}";
+                byte[] requestBytes = Encoding.UTF8.GetBytes(request);
+                _stream.Write(requestBytes, 0, requestBytes.Length);
+                _stream.Flush();
+
+                // Read response
+                byte[] responseBuffer = new byte[4096];
+                int bytesRead = _stream.Read(responseBuffer, 0, responseBuffer.Length);
+                string response = Encoding.UTF8.GetString(responseBuffer, 0, bytesRead);
+
+                if (response.StartsWith("OK"))
+                {
+                    _isConnected = true;
+                    StatusTextBlock.Text = $"Connected as {_username}";
+                    UpdateUI();
+                    
+                    // Reload users list
+                    LoadUsersList();
+                }
+                else
+                {
+                    // Login failed - close connection
+                    _stream.Close();
+                    _tcpClient.Close();
+                    _stream = null;
+                    _tcpClient = null;
+                    
+                    string error = response.Contains("|") ? response.Split('|')[1] : response;
+                    StatusTextBlock.Text = $"Reconnection failed: {error}";
+                    MessageBox.Show($"Reconnection failed: {error}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    UpdateUI();
+                }
+            }
+            catch (SocketException socketEx)
+            {
+                _isConnected = false;
+                StatusTextBlock.Text = $"Connection error: {socketEx.Message}";
+                MessageBox.Show($"Connection error: {socketEx.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UpdateUI();
+            }
+            catch (Exception ex)
+            {
+                _isConnected = false;
+                StatusTextBlock.Text = $"Reconnection error: {ex.Message}";
+                MessageBox.Show($"Reconnection error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UpdateUI();
+            }
+        }
+
+        private void HandleConnectionLoss()
+        {
+            if (_isConnected)
+            {
+                _isConnected = false;
+                StatusTextBlock.Text = "Connection lost";
+                UpdateUI();
             }
         }
 
@@ -106,6 +199,16 @@ namespace Client
                 {
                     MessageBox.Show($"Send failed: {response}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
+            }
+            catch (SocketException)
+            {
+                HandleConnectionLoss();
+                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (IOException)
+            {
+                HandleConnectionLoss();
+                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
@@ -157,6 +260,16 @@ namespace Client
                     MessageBox.Show($"Get messages failed: {response}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
+            catch (SocketException)
+            {
+                HandleConnectionLoss();
+                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch (IOException)
+            {
+                HandleConnectionLoss();
+                MessageBox.Show("Connection lost. Please reconnect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             catch (Exception ex)
             {
                 MessageBox.Show($"Refresh error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -165,7 +278,7 @@ namespace Client
 
         private void UpdateUI()
         {
-            ConnectButton.Content = "Disconnect";
+            ConnectButton.Content = _isConnected ? "Disconnect" : "Connect";
             SendButton.IsEnabled = _isConnected;
             RefreshButton.IsEnabled = _isConnected;
             RefreshUsersButton.IsEnabled = _isConnected;
@@ -236,6 +349,14 @@ namespace Client
                 {
                     System.Diagnostics.Debug.WriteLine($"Get users failed: {response}");
                 }
+            }
+            catch (SocketException)
+            {
+                HandleConnectionLoss();
+            }
+            catch (System.IO.IOException)
+            {
+                HandleConnectionLoss();
             }
             catch (Exception ex)
             {
