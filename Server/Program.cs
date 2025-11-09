@@ -220,12 +220,6 @@ namespace Server
                     return "PONG";
                 }
                 
-                if (command == "GET_USERS")
-                {
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Getting list of users from {clientEndpoint}");
-                    return GetUsers();
-                }
-                
                 // Other commands require at least 2 parts (command and username)
                 if (parts.Length < 2)
                 {
@@ -234,6 +228,13 @@ namespace Server
                 }
 
                 string username = parts[1];
+                
+                // Handle GET_USERS command (requires username to exclude current user)
+                if (command == "GET_USERS")
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Getting list of users from {clientEndpoint} (excluding {username})");
+                    return GetUsers(username);
+                }
                 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing {command} request from {clientEndpoint} for user: {username}");
 
@@ -436,7 +437,7 @@ namespace Server
             }
         }
 
-        static string GetUsers()
+        static string GetUsers(string excludeUsername)
         {
             try
             {
@@ -445,10 +446,12 @@ namespace Server
                 using (var connection = new SQLiteConnection(_connectionString))
                 {
                     connection.Open();
-                    string selectQuery = "SELECT Username FROM Users ORDER BY Username";
+                    // Select all users except the current user
+                    string selectQuery = "SELECT Username FROM Users WHERE Username != @excludeUser ORDER BY Username";
                     
                     using (var command = new SQLiteCommand(selectQuery, connection))
                     {
+                        command.Parameters.AddWithValue("@excludeUser", excludeUsername);
                         using (var reader = command.ExecuteReader())
                         {
                             while (reader.Read())

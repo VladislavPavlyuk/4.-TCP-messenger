@@ -185,7 +185,8 @@ namespace Client
 
             try
             {
-                string request = "GET_USERS";
+                // Send request with current username to exclude it from the list
+                string request = $"GET_USERS|{_username}";
                 byte[] requestBytes = Encoding.UTF8.GetBytes(request);
                 _stream.Write(requestBytes, 0, requestBytes.Length);
                 _stream.Flush();
