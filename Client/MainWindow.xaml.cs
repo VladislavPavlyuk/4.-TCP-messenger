@@ -10,52 +10,48 @@ namespace Client
         private TcpClient? _tcpClient;
         private NetworkStream? _stream;
         private bool _isConnected = false;
+        private string _username;
 
-        public MainWindow()
+        public MainWindow(TcpClient tcpClient, NetworkStream stream, string username, string server, int port)
         {
             InitializeComponent();
+            
+            // Verify connection is valid and open
+            if (tcpClient == null || stream == null)
+            {
+                throw new ArgumentNullException("Connection objects cannot be null");
+            }
+            
+            if (!tcpClient.Connected)
+            {
+                throw new InvalidOperationException("TcpClient is not connected");
+            }
+            
+            // Transfer connection from LoginWindow - do not close it
+            _tcpClient = tcpClient;
+            _stream = stream;
+            _username = username;
+            _isConnected = true;
+            
+            System.Diagnostics.Debug.WriteLine($"MainWindow created: TcpClient.Connected={tcpClient.Connected}, Stream={stream != null}");
+            
+            UsernameTextBox.Text = username;
+            ServerTextBox.Text = server;
+            PortTextBox.Text = port.ToString();
+            UsernameTextBox.IsEnabled = false;
+            ServerTextBox.IsEnabled = false;
+            PortTextBox.IsEnabled = false;
+            
+            StatusTextBlock.Text = $"Connected as {username}";
             UpdateUI();
+            
+            // Connection is transferred from LoginWindow and should remain open
+            // Connection will be used for messaging operations
         }
 
         private void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
-            if (!_isConnected)
-            {
-                Connect();
-            }
-            else
-            {
-                Disconnect();
-            }
-        }
-
-        private void Connect()
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(UsernameTextBox.Text))
-                {
-                    MessageBox.Show("Please enter a username", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                string server = ServerTextBox.Text;
-                int port = int.Parse(PortTextBox.Text);
-
-                _tcpClient = new TcpClient();
-                _tcpClient.Connect(server, port);
-                _stream = _tcpClient.GetStream();
-
-                _isConnected = true;
-                StatusTextBlock.Text = $"Connected as {UsernameTextBox.Text}";
-                UpdateUI();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Connection failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                _isConnected = false;
-                UpdateUI();
-            }
+            Disconnect();
         }
 
         private void Disconnect()
@@ -90,7 +86,7 @@ namespace Client
 
             try
             {
-                string request = $"SEND|{UsernameTextBox.Text}|{ToUserTextBox.Text}|{MessageTextBox.Text}";
+                string request = $"SEND|{_username}|{ToUserTextBox.Text}|{MessageTextBox.Text}";
                 byte[] requestBytes = Encoding.UTF8.GetBytes(request);
                 _stream.Write(requestBytes, 0, requestBytes.Length);
 
@@ -124,7 +120,7 @@ namespace Client
 
             try
             {
-                string request = $"GET|{UsernameTextBox.Text}";
+                string request = $"GET|{_username}";
                 byte[] requestBytes = Encoding.UTF8.GetBytes(request);
                 _stream.Write(requestBytes, 0, requestBytes.Length);
 
@@ -166,18 +162,18 @@ namespace Client
 
         private void UpdateUI()
         {
-            ConnectButton.Content = _isConnected ? "Disconnect" : "Connect";
-            ServerTextBox.IsEnabled = !_isConnected;
-            PortTextBox.IsEnabled = !_isConnected;
-            UsernameTextBox.IsEnabled = !_isConnected;
+            ConnectButton.Content = "Disconnect";
             SendButton.IsEnabled = _isConnected;
             RefreshButton.IsEnabled = _isConnected;
         }
 
         protected override void OnClosed(EventArgs e)
         {
+            System.Diagnostics.Debug.WriteLine("MainWindow.OnClosed: Closing connection and shutting down");
             Disconnect();
             base.OnClosed(e);
+            // Shutdown application when MainWindow closes
+            Application.Current.Shutdown();
         }
     }
 }
