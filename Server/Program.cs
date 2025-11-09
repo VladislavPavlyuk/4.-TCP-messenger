@@ -213,11 +213,17 @@ namespace Server
                 string[] parts = request.Split('|');
                 string command = parts[0].Trim();
                 
-                // Handle PING command (no parameters required)
+                // Handle commands that don't require parameters
                 if (command == "PING")
                 {
                     Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Received PING from {clientEndpoint}");
                     return "PONG";
+                }
+                
+                if (command == "GET_USERS")
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Getting list of users from {clientEndpoint}");
+                    return GetUsers();
                 }
                 
                 // Other commands require at least 2 parts (command and username)
@@ -422,6 +428,39 @@ namespace Server
                 }
 
                 string result = string.Join("||", messages);
+                return $"OK|{result}";
+            }
+            catch (Exception ex)
+            {
+                return $"ERROR|{ex.Message}";
+            }
+        }
+
+        static string GetUsers()
+        {
+            try
+            {
+                var users = new List<string>();
+                
+                using (var connection = new SQLiteConnection(_connectionString))
+                {
+                    connection.Open();
+                    string selectQuery = "SELECT Username FROM Users ORDER BY Username";
+                    
+                    using (var command = new SQLiteCommand(selectQuery, connection))
+                    {
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                string username = reader.GetString(0);
+                                users.Add(username);
+                            }
+                        }
+                    }
+                }
+
+                string result = string.Join("||", users);
                 return $"OK|{result}";
             }
             catch (Exception ex)

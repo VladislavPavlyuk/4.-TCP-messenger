@@ -47,6 +47,9 @@ namespace Client
             
             // Connection is transferred from LoginWindow and should remain open
             // Connection will be used for messaging operations
+            
+            // Load list of registered users
+            LoadUsersList();
         }
 
         private void ConnectButton_Click(object sender, RoutedEventArgs e)
@@ -165,6 +168,58 @@ namespace Client
             ConnectButton.Content = "Disconnect";
             SendButton.IsEnabled = _isConnected;
             RefreshButton.IsEnabled = _isConnected;
+            RefreshUsersButton.IsEnabled = _isConnected;
+        }
+
+        private void RefreshUsersButton_Click(object sender, RoutedEventArgs e)
+        {
+            LoadUsersList();
+        }
+
+        private void LoadUsersList()
+        {
+            if (!_isConnected || _stream == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string request = "GET_USERS";
+                byte[] requestBytes = Encoding.UTF8.GetBytes(request);
+                _stream.Write(requestBytes, 0, requestBytes.Length);
+                _stream.Flush();
+
+                byte[] responseBuffer = new byte[4096];
+                int bytesRead = _stream.Read(responseBuffer, 0, responseBuffer.Length);
+                string response = Encoding.UTF8.GetString(responseBuffer, 0, bytesRead);
+
+                if (response.StartsWith("OK"))
+                {
+                    UsersListBox.Items.Clear();
+                    string usersData = response.Substring(3); // Remove "OK|"
+                    
+                    if (!string.IsNullOrEmpty(usersData))
+                    {
+                        string[] users = usersData.Split(new string[] { "||" }, StringSplitOptions.None);
+                        foreach (string user in users)
+                        {
+                            if (!string.IsNullOrWhiteSpace(user))
+                            {
+                                UsersListBox.Items.Add(user);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"Get users failed: {response}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Load users error: {ex.Message}");
+            }
         }
 
         protected override void OnClosed(EventArgs e)
